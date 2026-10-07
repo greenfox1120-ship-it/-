@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 from groq import Groq
 
@@ -24,20 +25,42 @@ client = Groq(api_key=api_key)
 # 최신 지원 모델 지정
 MODEL_NAME = "openai/gpt-oss-120b"
 
-# 세션 상태에 대화 기록 저장
+# 세션 상태에 대화 기록 저장 (LaTeX 수식 출력 규격 명시)
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "system",
-            "content": "당신은 친절하고 실력 있는 물리 및 수학 AI 튜터입니다. 사용자의 질문에 맞춰 단계별로 이해하기 쉽게 설명해 주세요."
+            "content": (
+                "당신은 친절하고 실력 있는 물리 및 수학 AI 튜터입니다. "
+                "사용자의 질문에 맞춰 단계별로 이해하기 쉽게 설명해 주세요.\n\n"
+                "[수식 작성 필수 규칙]\n"
+                "1. 모든 수학 및 물리 수식은 표준 LaTeX 문법을 사용하세요.\n"
+                "2. 수식 표기 시 대괄호 [ ... ] 나 소괄호 ( ... ) 대신 반드시 아래 규칙을 따르세요:\n"
+                "   - 독립된 블록 수식: $$ 수식 $$\n"
+                "   - 문장 내 인라인 수식: $ 수식 $\n"
+                "3. 수식 내부나 \\sqrt, \\frac 문법 안에 불필요한 쉼표(,)나 대괄호 기호를 넣지 마세요.\n"
+                "   예시: 근의 공식은 $$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$ 형태입니다."
+            )
         }
     ]
+
+# 수식 렌더링을 정형화하는 헬퍼 함수
+def format_math_response(text: str) -> str:
+    # \[ 수식 \] 형태를 $$ 수식 $$ 형태로 변환
+    text = re.sub(r'\\\[\s*(.*?)\s*\\\]', r'$$\1$$', text, flags=re.DOTALL)
+    # \( 수식 \) 형태를 $ 수식 $ 형태로 변환
+    text = re.sub(r'\\\(\s*(.*?)\s*\\\)', r'$\1$', text, flags=re.DOTALL)
+    # [ 수식 ] 독립 형태를 $$ 수식 $$ 형태로 변환
+    text = re.sub(r'^\s*\[\s*(.*?)\s*\]\s*$', r'$$\1$$', text, flags=re.MULTILINE)
+    # \sqrt,b^{2} 처럼 루트/분수 뒤 잘못 들어간 쉼표 제거
+    text = re.sub(r'(\\sqrt|\\frac)\s*,\s*', r'\1 ', text)
+    return text
 
 # 이전 대화 내용 화면에 표시 (system 메시지 제외)
 for msg in st.session_state.messages:
     if msg["role"] != "system":
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            st.markdown(format_math_response(msg["content"]))
 
 # 사용자 질문 입력
 if user_input := st.chat_input("질문을 입력하세요 (예: 이차방정식 근의 공식 설명해줘)"):
@@ -53,12 +76,15 @@ if user_input := st.chat_input("질문을 입력하세요 (예: 이차방정식 
                 response = client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=st.session_state.messages,
-                    temperature=0.7,
+                    temperature=0.3, # 일관된 수식 출력을 위해 낮은 온도 설정
                 )
                 ai_answer = response.choices[0].message.content
-                st.markdown(ai_answer)
+                
+                # 수식 후처리 적용
+                formatted_answer = format_math_response(ai_answer)
+                st.markdown(formatted_answer)
                 
                 # AI 답변 대화 기록에 저장
-                st.session_state.messages.append({"role": "assistant", "content": ai_answer})
+                st.session_state.messages.append({"role": "assistant", "content": formatted_answer})
             except Exception as e:
                 st.error(f"API 호출 중 오류가 발생했습니다: {e}")
