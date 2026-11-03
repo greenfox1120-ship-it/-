@@ -34,7 +34,7 @@ client = Groq(api_key=api_key)
 # 최신 지원 모델 지정
 MODEL_NAME = "openai/gpt-oss-120b"
 
-# 세션 상태에 대화 기록 저장 (단계별 풀이 및 수식 규칙 강화)
+# 세션 상태에 대화 기록 저장 (수식 및 줄바꿈 규칙 엄격화)
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
@@ -53,27 +53,32 @@ if "messages" not in st.session_state:
                 "- 최종 결과와 핵심 내용을 깔끔하게 요약합니다.\n\n"
                 "[수식 작성 필수 규칙]\n"
                 "1. 모든 수학 및 물리 수식은 표준 LaTeX 문법을 사용하세요.\n"
-                "2. 독립된 블록 수식은 반드시 $$ 수식 $$ 형태로 작성하세요.\n"
-                "3. 여러 줄 수식은 반드시 $$\\begin{aligned} ... \\end{aligned}$$ 형태로 감싸서 작성하고, 시작과 끝의 `$$` 기호를 절대 누락하지 마세요.\n"
+                "2. 문장 중간에 들어가는 짧은 수식은 반드시 인라인 형태인 $수식$ (예: $f(x)=0$)으로만 쓰세요. 문장 중간에 블록 형태인 $$를 쓰지 마세요.\n"
+                "3. 수식이 독립된 한 줄을 차지해야 할 때만 블록 형태인 $$수식$$을 사용하세요.\n"
                 "4. 수식 내부나 \\sqrt, \\frac 문법 안에 불필요한 쉼표(,)나 대괄호 기호를 넣지 마세요."
             )
         }
     ]
 
-# 수식 렌더링을 정형화하는 헬퍼 함수
+# 수식 렌더링 오류를 방지하고 정형화하는 헬퍼 함수
 def format_math_response(text: str) -> str:
-    # \[ 수식 \] 형태를 $$ 수식 $$ 형태로 변환
-    text = re.sub(r'\\\[\s*(.*?)\s*\\\]', r'$$\1$$', text, flags=re.DOTALL)
-    # \( 수식 \) 형태를 $ 수식 $ 형태로 변환
-    text = re.sub(r'\\\(\s*(.*?)\s*\\\)', r'$\1$', text, flags=re.DOTALL)
-    # [ 수식 ] 독립 형태를 $$ 수식 $$ 형태로 변환
-    text = re.sub(r'^\s*\[\s*(.*?)\s*\]\s*$', r'$$\1$$', text, flags=re.MULTILINE)
-    # \sqrt,b^{2} 처럼 루트/분수 뒤 잘못 들어간 쉼표 제거
-    text = re.sub(r'(\\sqrt|\\frac)\s*,\s*', r'\1 ', text)
+    # 1. 잘못 붙어 있는 $$ 기호와 텍스트를 분리
+    text = re.sub(r'([^\s])\$\$', r'\1 $$', text)
+    text = re.sub(r'\$\$([^\s])', r'$$ \1', text)
     
-    # \end{aligned}는 있는데 앞쪽 $$가 누락된 경우 자동으로 감싸주기
-    text = re.sub(r'(?<!\$)\s*(\\begin\{aligned\}.*?\\end\{aligned\})\s*(?!\$)', r'$$\1$$', text, flags=re.DOTALL)
-    text = re.sub(r'^(?!.*\$\$)(.*?\\end\{aligned\}\s*\$\$)', r'$$\1', text, flags=re.MULTILINE)
+    # 2. 문장 중간에 잘못 들어간 단발성 $$...$$ 를 인라인 $...$ 으로 자동 전환하여 빨간색 에러 방지
+    def clean_inline_math(match):
+        inner = match.group(1)
+        if '\n' not in inner and len(inner) < 60:
+            return f"${inner}$"
+        return f"$$\n{inner}\n$$"
+    
+    text = re.sub(r'\$\$(.*?)\$\$', clean_inline_math, text, flags=re.DOTALL)
+    
+    # 3. 기타 LaTeX 태그 정돈
+    text = re.sub(r'\\\[\s*(.*?)\s*\\\]', r'$$\1$$', text, flags=re.DOTALL)
+    text = re.sub(r'\\\(\s*(.*?)\s*\\\)', r'$\1$', text, flags=re.DOTALL)
+    text = re.sub(r'(\\sqrt|\\frac)\s*,\s*', r'\1 ', text)
     
     return text
 
@@ -84,7 +89,7 @@ for msg in st.session_state.messages:
             st.markdown(format_math_response(msg["content"]))
 
 # 사용자 질문 입력
-if user_input := st.chat_input("질문을 입력하세요 (예: 이차방정식 근의 공식 설명해줘)"):
+if user_input := st.chat_input("질문을 입력하세요 (예: 삼차함수 그래프 그려줘)"):
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
@@ -102,12 +107,11 @@ if user_input := st.chat_input("질문을 입력하세요 (예: 이차방정식 
     with st.chat_message("assistant"):
         with st.spinner("단계별 분석 중..."):
             try:
-                # AI 텍스트 답변 생성
                 response = client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=payload_messages,
                     temperature=0.3,
-                    max_completion_tokens=2048,
+                    max_completion_tokens=4096, # 토큰 한도를 넉넉하게 상향
                 )
                 ai_answer = response.choices[0].message.content
                 
