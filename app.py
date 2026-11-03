@@ -53,18 +53,28 @@ if "messages" not in st.session_state:
                 "- 최종 결과와 핵심 내용을 깔끔하게 요약합니다.\n\n"
                 "[수식 작성 필수 규칙]\n"
                 "1. 모든 수학 및 물리 수식은 표준 LaTeX 문법을 사용하세요.\n"
-                "2. 독립된 블록 수식은 $$ 수식 $$, 인라인 수식은 $ 수식 $ 형태로 작성하세요.\n"
-                "3. 수식 내부나 \\sqrt, \\frac 문법 안에 불필요한 쉼표(,)나 대괄호 기호를 넣지 마세요."
+                "2. 독립된 블록 수식은 반드시 $$ 수식 $$ 형태로 작성하세요.\n"
+                "3. 여러 줄 수식은 반드시 $$\\begin{aligned} ... \\end{aligned}$$ 형태로 감싸서 작성하고, 시작과 끝의 `$$` 기호를 절대 누락하지 마세요.\n"
+                "4. 수식 내부나 \\sqrt, \\frac 문법 안에 불필요한 쉼표(,)나 대괄호 기호를 넣지 마세요."
             )
         }
     ]
 
 # 수식 렌더링을 정형화하는 헬퍼 함수
 def format_math_response(text: str) -> str:
+    # \[ 수식 \] 형태를 $$ 수식 $$ 형태로 변환
     text = re.sub(r'\\\[\s*(.*?)\s*\\\]', r'$$\1$$', text, flags=re.DOTALL)
+    # \( 수식 \) 형태를 $ 수식 $ 형태로 변환
     text = re.sub(r'\\\(\s*(.*?)\s*\\\)', r'$\1$', text, flags=re.DOTALL)
+    # [ 수식 ] 독립 형태를 $$ 수식 $$ 형태로 변환
     text = re.sub(r'^\s*\[\s*(.*?)\s*\]\s*$', r'$$\1$$', text, flags=re.MULTILINE)
+    # \sqrt,b^{2} 처럼 루트/분수 뒤 잘못 들어간 쉼표 제거
     text = re.sub(r'(\\sqrt|\\frac)\s*,\s*', r'\1 ', text)
+    
+    # \end{aligned}는 있는데 앞쪽 $$가 누락된 경우 자동으로 감싸주기
+    text = re.sub(r'(?<!\$)\s*(\\begin\{aligned\}.*?\\end\{aligned\})\s*(?!\$)', r'$$\1$$', text, flags=re.DOTALL)
+    text = re.sub(r'^(?!.*\$\$)(.*?\\end\{aligned\}\s*\$\$)', r'$$\1', text, flags=re.MULTILINE)
+    
     return text
 
 # 이전 대화 내용 화면에 표시 (system 메시지 제외)
