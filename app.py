@@ -1,6 +1,8 @@
 import re
 import streamlit as st
 from groq import Groq
+import matplotlib.pyplot as plt
+import numpy as np
 
 # 페이지 기본 설정
 st.set_page_config(
@@ -10,7 +12,7 @@ st.set_page_config(
 )
 
 st.title("📐 AI 물리·수학 튜터")
-st.write("물리 및 수학 문제나 개념에 대해 자유롭게 질문해보세요!")
+st.write("물리 및 수학 문제나 개념에 대해 자유롭게 질문해보세요! (모든 답변에 관련 그래프가 함께 제공됩니다)")
 
 # Secrets에서 API 키 불러오기
 api_key = st.secrets.get("GROQ_API_KEY")
@@ -25,7 +27,7 @@ client = Groq(api_key=api_key)
 # 최신 지원 모델 지정
 MODEL_NAME = "openai/gpt-oss-120b"
 
-# 세션 상태에 대화 기록 저장 (LaTeX 수식 출력 규격 명시)
+# 세션 상태에 대화 기록 저장 (그래프 생성 지침 추가)
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
@@ -46,15 +48,66 @@ if "messages" not in st.session_state:
 
 # 수식 렌더링을 정형화하는 헬퍼 함수
 def format_math_response(text: str) -> str:
-    # \[ 수식 \] 형태를 $$ 수식 $$ 형태로 변환
     text = re.sub(r'\\\[\s*(.*?)\s*\\\]', r'$$\1$$', text, flags=re.DOTALL)
-    # \( 수식 \) 형태를 $ 수식 $ 형태로 변환
     text = re.sub(r'\\\(\s*(.*?)\s*\\\)', r'$\1$', text, flags=re.DOTALL)
-    # [ 수식 ] 독립 형태를 $$ 수식 $$ 형태로 변환
     text = re.sub(r'^\s*\[\s*(.*?)\s*\]\s*$', r'$$\1$$', text, flags=re.MULTILINE)
-    # \sqrt,b^{2} 처럼 루트/분수 뒤 잘못 들어간 쉼표 제거
     text = re.sub(r'(\\sqrt|\\frac)\s*,\s*', r'\1 ', text)
     return text
+
+# 질문 내용에 맞춰 자동으로 그래프를 그려주는 함수
+def generate_math_plot(user_query: str):
+    fig, ax = plt.subplots(figsize=(8, 4))
+    
+    query_lower = user_query.lower()
+    
+    try:
+        if "이차" in query_lower or "포물선" in query_lower or "근의 공식" in query_lower or "x^2" in query_lower:
+            x = np.linspace(-10, 10, 400)
+            y = x**2 - 4*x + 3  # 기본 예시 이차함수
+            ax.plot(x, y, label="$y = x^2 - 4x + 3$", color="blue", linewidth=2)
+            ax.axhline(0, color="black", linewidth=1, linestyle="--")
+            ax.axvline(0, color="black", linewidth=1, linestyle="--")
+            ax.set_title("이차함수 그래프 예시")
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+            ax.grid(True, linestyle=":", alpha=0.7)
+            ax.legend()
+        elif "삼각" in query_lower or "sin" in query_lower or "cos" in query_lower:
+            x = np.linspace(0, 2 * np.pi, 400)
+            ax.plot(x, np.sin(x), label="y = sin(x)", color="green", linewidth=2)
+            ax.plot(x, np.cos(x), label="y = cos(x)", color="orange", linewidth=2, linestyle="--")
+            ax.set_title("삼각함수 그래프")
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+            ax.grid(True, linestyle=":", alpha=0.7)
+            ax.legend()
+        elif "속도" in query_lower or "가속도" in query_lower or "물리" in query_lower or "운동" in query_lower:
+            t = np.linspace(0, 5, 100)
+            v0 = 0
+            g = 9.8
+            s = v0 * t + 0.5 * g * t**2  # 자유낙하 거리
+            ax.plot(t, s, label="자유낙하 거리 ($s = \\frac{1}{2}gt^2$)", color="purple", linewidth=2)
+            ax.set_title("시간에 따른 이동 거리 그래프")
+            ax.set_xlabel("시간 t (s)")
+            ax.set_ylabel("거리 s (m)")
+            ax.grid(True, linestyle=":", alpha=0.7)
+            ax.legend()
+        else:
+            # 기본 일반 함수 그래프 (예: y = x)
+            x = np.linspace(-10, 10, 400)
+            y = np.sin(x) / (x + 1e-5)
+            ax.plot(x, y, label="상크 함수 (Sinc function)", color="red", linewidth=2)
+            ax.set_title("수학 함수 시각화")
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+            ax.grid(True, linestyle=":", alpha=0.7)
+            ax.legend()
+            
+        st.pyplot(fig)
+    except Exception as e:
+        st.info("그래프를 생성하는 중 오류가 발생했습니다.")
+    finally:
+        plt.close(fig)
 
 # 이전 대화 내용 화면에 표시 (system 메시지 제외)
 for msg in st.session_state.messages:
@@ -69,18 +122,28 @@ if user_input := st.chat_input("질문을 입력하세요 (예: 이차방정식 
     with st.chat_message("user"):
         st.markdown(user_input)
 
+    # API에 전달할 메시지 제한 (토큰 초과 방지)
+    system_msg = [st.session_state.messages[0]]
+    recent_msgs = [m for m in st.session_state.messages[1:] if m["role"] != "system"][-6:]
+    payload_messages = system_msg + recent_msgs
+
     # AI 답변 생성
     with st.chat_message("assistant"):
-        with st.spinner("생각 중..."):
+        with st.spinner("생각 중 및 그래프 그리는 중..."):
             try:
+                # 1. 항상 그래프 먼저 출력
+                generate_math_plot(user_input)
+
+                # 2. AI 텍스트 답변 생성
                 response = client.chat.completions.create(
                     model=MODEL_NAME,
-                    messages=st.session_state.messages,
-                    temperature=0.3, # 일관된 수식 출력을 위해 낮은 온도 설정
+                    messages=payload_messages,
+                    temperature=0.3,
+                    max_completion_tokens=2048,
                 )
                 ai_answer = response.choices[0].message.content
                 
-                # 수식 후처리 적용
+                # 수식 후처리 적용 및 출력
                 formatted_answer = format_math_response(ai_answer)
                 st.markdown(formatted_answer)
                 
