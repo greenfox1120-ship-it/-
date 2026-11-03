@@ -1,8 +1,6 @@
 import re
 import streamlit as st
 from groq import Groq
-import matplotlib.pyplot as plt
-import numpy as np
 
 # 페이지 기본 설정
 st.set_page_config(
@@ -12,7 +10,7 @@ st.set_page_config(
 )
 
 st.title("📐 AI 물리·수학 튜터")
-st.write("물리 및 수학 문제나 개념에 대해 자유롭게 질문해보세요! (단계별 상세 풀이와 그래프가 함께 제공됩니다)")
+st.write("물리 및 수학 문제나 개념에 대해 자유롭게 질문해보세요! (단계별 상세 풀이가 제공됩니다)")
 
 # 사이드바에 교과서 파일 업로드 기능 추가
 st.sidebar.header("📚 교과서 자료 업로드")
@@ -69,59 +67,6 @@ def format_math_response(text: str) -> str:
     text = re.sub(r'(\\sqrt|\\frac)\s*,\s*', r'\1 ', text)
     return text
 
-# 질문 내용에 맞춰 자동으로 그래프를 그려주는 함수
-def generate_math_plot(user_query: str):
-    fig, ax = plt.subplots(figsize=(8, 4))
-    query_lower = user_query.lower()
-    
-    try:
-        if "이차" in query_lower or "포물선" in query_lower or "근의 공식" in query_lower or "x^2" in query_lower:
-            x = np.linspace(-10, 10, 400)
-            y = x**2 - 4*x + 3
-            ax.plot(x, y, label="$y = x^2 - 4x + 3$", color="blue", linewidth=2)
-            ax.axhline(0, color="black", linewidth=1, linestyle="--")
-            ax.axvline(0, color="black", linewidth=1, linestyle="--")
-            ax.set_title("이차함수 그래프 예시")
-            ax.set_xlabel("x")
-            ax.set_ylabel("y")
-            ax.grid(True, linestyle=":", alpha=0.7)
-            ax.legend()
-        elif "삼각" in query_lower or "sin" in query_lower or "cos" in query_lower:
-            x = np.linspace(0, 2 * np.pi, 400)
-            ax.plot(x, np.sin(x), label="y = sin(x)", color="green", linewidth=2)
-            ax.plot(x, np.cos(x), label="y = cos(x)", color="orange", linewidth=2, linestyle="--")
-            ax.set_title("삼각함수 그래프")
-            ax.set_xlabel("x")
-            ax.set_ylabel("y")
-            ax.grid(True, linestyle=":", alpha=0.7)
-            ax.legend()
-        elif "속도" in query_lower or "가속도" in query_lower or "물리" in query_lower or "운동" in query_lower:
-            t = np.linspace(0, 5, 100)
-            v0 = 0
-            g = 9.8
-            s = v0 * t + 0.5 * g * t**2
-            ax.plot(t, s, label="자유낙하 거리 ($s = \\frac{1}{2}gt^2$)", color="purple", linewidth=2)
-            ax.set_title("시간에 따른 이동 거리 그래프")
-            ax.set_xlabel("시간 t (s)")
-            ax.set_ylabel("거리 s (m)")
-            ax.grid(True, linestyle=":", alpha=0.7)
-            ax.legend()
-        else:
-            x = np.linspace(-10, 10, 400)
-            y = np.sin(x) / (x + 1e-5)
-            ax.plot(x, y, label="싱크 함수 (Sinc function)", color="red", linewidth=2)
-            ax.set_title("수학 함수 시각화")
-            ax.set_xlabel("x")
-            ax.set_ylabel("y")
-            ax.grid(True, linestyle=":", alpha=0.7)
-            ax.legend()
-            
-        st.pyplot(fig)
-    except Exception as e:
-        st.info("그래프를 생성하는 중 오류가 발생했습니다.")
-    finally:
-        plt.close(fig)
-
 # 이전 대화 내용 화면에 표시 (system 메시지 제외)
 for msg in st.session_state.messages:
     if msg["role"] != "system":
@@ -145,12 +90,9 @@ if user_input := st.chat_input("질문을 입력하세요 (예: 이차방정식 
 
     # AI 답변 생성
     with st.chat_message("assistant"):
-        with st.spinner("단계별 분석 및 그래프 생성 중..."):
+        with st.spinner("단계별 분석 중..."):
             try:
-                # 1. 그래프 먼저 출력
-                generate_math_plot(user_input)
-
-                # 2. AI 텍스트 답변 생성
+                # AI 텍스트 답변 생성
                 response = client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=payload_messages,
