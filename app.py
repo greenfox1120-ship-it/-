@@ -2,22 +2,22 @@ import re
 import streamlit as st
 from groq import Groq
 
-# 페이지 기본 설정
+# 1. 페이지 기본 설정
 st.set_page_config(
     page_title="물리친다 - AI 물리·수학 튜터",
     page_icon="⚡",
     layout="centered"
 )
 
-# 메인 타이틀 & 배너 UI
+# 2. 메인 타이틀 & UI 헤더
 st.title("⚡ 물리친다 (Pul-i-chin-da)")
 st.caption("어려운 물리·수학 문제, AI 튜터와 함께 시원하게 물리치자!")
 st.markdown("---")
 
-# 사이드바 UI
+# 3. 사이드바 UI (참고서/교과서 텍스트 파일 업로드)
 st.sidebar.header("📚 교과서·참고서 패치")
 st.sidebar.write("내 교과서 맞춤형으로 문제를 해결해보세요.")
-uploaded_file = st.sidebar.file_uploader("텍스트 파일(.txt) 업로드", type=["txt"])
+uploaded_file = st.sidebar.file_uploader("텍스트 파일(.txt) 업로드", type=["txt", "TXT"])
 
 textbook_context = ""
 if uploaded_file is not None:
@@ -25,22 +25,20 @@ if uploaded_file is not None:
     st.sidebar.success("✅ 교과서 내용이 장착되었습니다!")
 
 st.sidebar.markdown("---")
-st.sidebar.info("💡 **팁**: 질문 시 '자세히 풀어줘'라고 요청하면 4단계 핵심 분석이 시작됩니다.")
+st.sidebar.info("💡 **팁**: 질문할 때 파일 내용이나 단원을 함께 언급하면 더욱 정확하게 풀이해 드립니다.")
 
-# Secrets에서 API 키 불러오기
+# 4. Secrets에서 API 키 검증
 api_key = st.secrets.get("GROQ_API_KEY")
 
 if not api_key:
     st.error("⚠️ GROQ_API_KEY가 등록되지 않았습니다. Streamlit Cloud의 Secrets 설정을 확인해 주세요.")
     st.stop()
 
-# Groq 클라이언트 초기화
+# 5. Groq 클라이언트 및 모델 설정
 client = Groq(api_key=api_key)
-
-# 최신 지원 모델 지정
 MODEL_NAME = "openai/gpt-oss-120b"
 
-# 세션 상태 대화 기록 초기화 (시스템 프롬프트 & UI 페르소나 적용)
+# 6. 세션 상태 및 페르소나/시스템 프롬프트 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
@@ -66,7 +64,7 @@ if "messages" not in st.session_state:
         }
     ]
 
-# 수식 렌더링을 정형화하는 헬퍼 함수
+# 7. 수식 LaTeX 렌더링 정형화 헬퍼 함수
 def format_math_response(text: str) -> str:
     text = re.sub(r'([^\s])\$\$', r'\1 $$', text)
     text = re.sub(r'\$\$([^\s])', r'$$ \1', text)
@@ -83,19 +81,19 @@ def format_math_response(text: str) -> str:
     text = re.sub(r'(\\sqrt|\\frac)\s*,\s*', r'\1 ', text)
     return text
 
-# 이전 대화 내용 화면에 표시
+# 8. 기존 대화 출력
 for msg in st.session_state.messages:
     if msg["role"] != "system":
         with st.chat_message(msg["role"]):
             st.markdown(format_math_response(msg["content"]))
 
-# 사용자 질문 입력
+# 9. 사용자 입력 처리 및 API 호출
 if user_input := st.chat_input("물리치고 싶은 문제나 개념을 입력하세요! (예: 등가속도 운동 공식 설명해줘)"):
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # API 전송 payload 구성
+    # 시스템 프롬프트에 업로드된 교과서 컨텍스트 동적 추가
     system_content = st.session_state.messages[0]["content"]
     if textbook_context:
         system_content += f"\n\n[참고 교과서 내용]\n{textbook_context}"
@@ -104,7 +102,7 @@ if user_input := st.chat_input("물리치고 싶은 문제나 개념을 입력�
     recent_msgs = [m for m in st.session_state.messages[1:] if m["role"] != "system"][-6:]
     payload_messages.extend(recent_msgs)
 
-    # AI 답변 생성
+    # AI 응답 생성
     with st.chat_message("assistant"):
         with st.spinner("⚡ '물리친다' 튜터가 문제를 정복하는 중..."):
             try:
