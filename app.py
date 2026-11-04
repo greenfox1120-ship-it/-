@@ -14,18 +14,16 @@ st.title("⚡ 물리친다 (Pul-i-chin-da)")
 st.caption("어려운 물리·수학 문제, AI 튜터와 함께 시원하게 물리치자!")
 st.markdown("---")
 
-# 3. 사이드바 UI (참고서/교과서 텍스트 파일 업로드)
-st.sidebar.header("📚 교과서·참고서 패치")
-st.sidebar.write("내 교과서 맞춤형으로 문제를 해결해보세요.")
-uploaded_file = st.sidebar.file_uploader("텍스트 파일(.txt) 업로드", type=["txt", "TXT"])
+# 3. 메인 화면에 파일 업로더 배치 (사이드바 대신 눈에 잘 띄는 곳으로 이동)
+st.markdown("### 📚 교과서·참고서 패치")
+uploaded_file = st.file_uploader("참고할 텍스트 파일(.txt)을 이곳에 업로드하거나 끌어다 놓으세요.", type=["txt", "TXT"])
 
 textbook_context = ""
 if uploaded_file is not None:
     textbook_context = uploaded_file.read().decode("utf-8")
-    st.sidebar.success("✅ 교과서 내용이 장착되었습니다!")
+    st.success("✅ 교과서 내용이 성공적으로 장착되었습니다!")
 
-st.sidebar.markdown("---")
-st.sidebar.info("💡 **팁**: 질문할 때 파일 내용이나 단원을 함께 언급하면 더욱 정확하게 풀이해 드립니다.")
+st.markdown("---")
 
 # 4. Secrets에서 API 키 검증
 api_key = st.secrets.get("GROQ_API_KEY")
