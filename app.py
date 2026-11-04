@@ -57,29 +57,29 @@ st.sidebar.write(f"🏆 이수율: {int(progress * 100)}% ({cleared_count}/{tota
 
 st.sidebar.markdown("---")
 
-# 🌟 [LMS 핵심 기능] 선택한 단원의 10문제 시험지 발행 버튼
+# 🌟 [LMS 핵심 기능] 선택한 단원의 10문제 시험지 발행 버튼 (수식 포맷팅 엄격 적용)
 if st.sidebar.button("📄 선택 단원 고난도 시험지(10문항) 발급"):
     st.session_state.current_exam_unit = selected_unit_to_test
     
-    # AI에게 고난도 10문제 출제 요청 프롬프트 생성
     exam_gen_prompt = (
         f"대학 전공/수능 킬러 수준의 **'{selected_unit_to_test}'** 단원 종합 평가 문제 총 10문제를 출제해 주세요.\n"
-        "[출제 조건]\n"
+        "[출제 조건 및 수식 작성 규칙]\n"
         "1. 정확히 10문제를 출제하세요.\n"
         "2. 난이도는 매우 어렵게 하되, 복잡한 지저분한 계산 대신 핵심 개념과 직관적 논리로 깔끔하게 풀리도록 숫자를 예쁘게 설계하세요.\n"
-        "3. 각 문제는 [문제 1]부터 [문제 10]까지 명확히 구분해 주시고, 정답 및 해설은 이 출제 내용에 포함하지 마세요(학생이 제출 후 채점받을 때 제공됨)."
+        "3. **절대 수식을 대괄호 `[...]`나 일반 텍스트 괄호 `(...)` 안에 넣지 마세요.** 모든 수식(함수, 변수, 조건 등)은 반드시 인라인 수식 `$수식$` 또는 독립 블록 수식 `$$수식$$` 형태의 표준 LaTeX 문법만 사용하세요.\n"
+        "4. 정답 및 해설은 이 출제 내용에 포함하지 마세요(학생이 제출 후 채점받을 때 제공됨)."
     )
     
-    with st.spinner(f"⚡ '{selected_unit_to_test}' 시험지를 출제하는 중입니다..."):
+    with st.spinner(f"⚡ '{selected_unit_to_test}' 시험지를 깔끔한 수식으로 출제하는 중입니다..."):
         try:
             client = Groq(api_key=st.secrets["GROQ_API_KEY"])
             response = client.chat.completions.create(
                 model="openai/gpt-oss-120b",
                 messages=[
-                    {"role": "system", "content": "당신은 명쾌한 출제 위원 AI입니다. 수식은 LaTeX를 사용하세요."},
+                    {"role": "system", "content": "당신은 명쾌한 출제 위원 AI입니다. 수식은 반드시 LaTeX($ 또는 $$)를 사용하세요."},
                     {"role": "user", "content": exam_gen_prompt}
                 ],
-                temperature=0.4,
+                temperature=0.3,
                 max_completion_tokens=4096,
             )
             st.session_state.exam_questions = response.choices[0].message.content
@@ -110,22 +110,31 @@ if "messages" not in st.session_state:
             "role": "system",
             "content": (
                 "당신은 대학 LMS 및 AI 튜터 '물리친다'입니다. "
-                "학생의 답안을 채점할 때 각 문제별 O/X를 판정하고, 전체 평균 점수(10문제 중 맞은 개수 기반)를 산출해 주세요. "
+                "모든 수식은 절대 대괄호 `[...]`로 감싸지 말고 표준 LaTeX(`$`, `$$`)로만 작성하세요. "
+                "학생의 답안을 채점할 때 각 문제별 O/X를 판정하고, 전체 점수를 산출해 주세요. "
                 "만약 7문제 이상 맞추거나 완벽히 이해했다면 '🎉 [합격/클리어] 이 단원을 정복했습니다!' 메시지를 포함해 주세요."
             )
         }
     ]
 
-# 7. 수식 정형화 헬퍼 함수
+# 7. 수식 정형화 헬퍼 함수 (대괄호/괄호로 잘못 감싸진 수식도 LaTeX로 자동 교정)
 def format_math_response(text: str) -> str:
+    # 잘못 들어간 대괄호 수식 패턴 교정 ([ f(x) = ... ] 형태를 $$ f(x) = ... $$ 로 변환)
+    text = re.sub(r'\[\s*([a-zA-Z].*?)\s*\]', r'$$\1$$', text)
+    
     text = re.sub(r'([^\s])\$\$', r'\1 $$', text)
     text = re.sub(r'\$\$([^\s])', r'$$ \1', text)
+    
     def clean_inline_math(match):
         inner = match.group(1)
         if '\n' not in inner and len(inner) < 60:
             return f"${inner}$"
         return f"$$\n{inner}\n$$"
+    
     text = re.sub(r'\$\$(.*?)\$\$', clean_inline_math, text, flags=re.DOTALL)
+    text = re.sub(r'\\\[\s*(.*?)\s*\\\]', r'$$\1$$', text, flags=re.DOTALL)
+    text = re.sub(r'\\\(\s*(.*?)\s*\\\)', r'$\1$', text, flags=re.DOTALL)
+    text = re.sub(r'(\\sqrt|\\frac)\s*,\s*', r'\1 ', text)
     return text
 
 # 8. 메인 화면: 발급된 시험지 표시 및 답안 제출 시스템
@@ -164,7 +173,6 @@ if st.session_state.current_exam_unit:
                         result_text = format_math_response(response.choices[0].message.content)
                         st.session_state.messages.append({"role": "assistant", "content": result_text})
                         
-                        # 채점 결과에 합격/클리어 키워드가 포함되면 자동으로 해당 단원 ⭕로 변경!
                         if "클리어" in result_text or "합격" in result_text:
                             st.session_state.cleared_units[st.session_state.current_exam_unit] = True
                             st.success(f"🎉 축하합니다! [{st.session_state.current_exam_unit}] 단원이 공식 클리어(⭕)되었습니다!")
@@ -173,7 +181,7 @@ if st.session_state.current_exam_unit:
                     except Exception as e:
                         st.error(f"채점 중 오류 발생: {e}")
 
-# 9. 대화 기록 출력 (일반 질문 및 채점 결과 히스토리)
+# 9. 대화 기록 출력
 st.markdown("---")
 st.subheader("💬 AI 튜터 Q&A 및 피드백 로그")
 for msg in st.session_state.messages:
