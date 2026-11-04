@@ -4,174 +4,207 @@ from groq import Groq
 
 # 1. 페이지 기본 설정
 st.set_page_config(
-    page_title="물리친다 - AI 물리·수학 튜터",
+    page_title="물리친다 - AI 대학형 학습 LMS",
     page_icon="⚡",
     layout="centered"
 )
 
 # 2. 메인 타이틀 & UI 헤더
-st.title("⚡ 물리친다 (Pul-i-chin-da)")
-st.caption("체계적인 4단계 교육과정으로 고등학교 수학·물리 정복하기!")
+st.title("⚡ 물리친다 (Pul-i-chin-da) - LMS 포털")
+st.caption("대학 전공/고등 심화 교육과정 퀘스트 클리어 및 AI 자동 채점 시스템")
 st.markdown("---")
 
-# 3. 사이드바 UI: 수학 & 물리 4단계 체계적 퀘스트 정복 지도
-st.sidebar.header("🗺️ 과목별 4단계 퀘스트 맵")
-st.sidebar.write("단원을 순서대로 클리어하며 정복해 보세요!")
-
-# 세션 상태에 수학/물리 4단계 단원 목록 초기화
+# 3. 세션 상태 초기화 (단원별 클리어 여부 및 시험 문제 상태 관리)
 if "cleared_units" not in st.session_state:
     st.session_state.cleared_units = {
-        # --- 수학 4단계 체계 ---
-        "📐 [수학 1단계] 공통수학 1, 2 (다항식/방정식/함수)": False,
-        "📐 [수학 2단계] 대수 및 기학 (지수·로그/삼각함수/벡터·이차곡선)": False,
-        "📐 [수학 3단계] 미적분 I (함수의 극한과 연속/미분법)": False,
-        "📐 [수학 4단계] 미적분 II (여러 가지 함수의 미분과 적분)": False,
-        
-        # --- 물리 4단계 체계 ---
-        "⚛️ [물리 1단계] 힘과 운동 (속도·가속도/뉴턴 법칙)": False,
-        "⚛️ [물리 2단계] 역학과 에너지 (일·에너지 보존/운동량)": False,
-        "⚛️ [물리 3단계] 전자기 (전기장/자기장/전자기 유도)": False,
-        "⚛️ [물리 4단계] 양자 및 파동 (빛과 물질의 이중성/현대 물리)": False,
+        "📐 [수학 1단계] 공통수학 1, 2": False,
+        "📐 [수학 2단계] 대수 및 기하": False,
+        "📐 [수학 3단계] 미적분 I": False,
+        "📐 [수학 4단계] 미적분 II": False,
+        "⚛️ [물리 1단계] 힘과 운동": False,
+        "⚛️ [물리 2단계] 역학과 에너지": False,
+        "⚛️ [물리 3단계] 전자기": False,
+        "⚛️ [물리 4단계] 양자 및 파동": False,
     }
 
-# 사이드바 단원별 체크리스트 렌더링
-selected_units_for_exam = []
-for unit in st.session_state.cleared_units:
-    is_checked = st.sidebar.checkbox(unit, value=st.session_state.cleared_units[unit])
-    st.session_state.cleared_units[unit] = is_checked
-    if is_checked:
-        selected_units_for_exam.append(unit)
+if "current_exam_unit" not in st.session_state:
+    st.session_state.current_exam_unit = None
 
-# 전체 정복률 계산 및 프로그레스 바 표시
+if "exam_questions" not in st.session_state:
+    st.session_state.exam_questions = ""
+
+# 4. 사이드바 UI: 대학 LMS 스타일 단원 퀘스트 맵
+st.sidebar.header("🎓 수강 과목 및 단원 퀘스트")
+st.sidebar.write("단원을 클릭하여 고난도 종합 평가에 응시하세요!")
+
+selected_unit_to_test = st.sidebar.selectbox(
+    "시험 응시할 단원 선택",
+    options=list(st.session_state.cleared_units.keys())
+)
+
+# 단원별 상태(⭕/❌) 시각화 및 현황판
+for unit, is_cleared in st.session_state.cleared_units.items():
+    badge = "⭕ [CLEAR]" if is_cleared else "❌ [LOCKED]"
+    st.sidebar.text(f"{badge} {unit}")
+
+# 전체 정복률 계산 및 프로그레스 바
 total_units = len(st.session_state.cleared_units)
 cleared_count = sum(1 for v in st.session_state.cleared_units.values() if v)
 progress = cleared_count / total_units
 
 st.sidebar.progress(progress)
-st.sidebar.write(f"🏆 전체 정복률: {int(progress * 100)}% ({cleared_count}/{total_units} 단계 완료)")
+st.sidebar.write(f"🏆 이수율: {int(progress * 100)}% ({cleared_count}/{total_units} 단원 이수)")
 
 st.sidebar.markdown("---")
 
-# 🌟 [신규 기능] 체크된 단원들의 종합 평가 문제 자동 생성 버튼
-st.sidebar.header("🎯 단원별 종합 평가")
-if st.sidebar.button("🔥 선택한 단원 10문제 시험 출제!"):
-    if not selected_units_for_exam:
-        st.sidebar.warning("⚠️ 최소 하나의 단원을 체크(선택)해 주세요!")
-    else:
-        # 시험 출제 프롬프트를 자동으로 입력창에 넣은 것처럼 세션 메시지에 추가
-        exam_prompt = (
-            f"다음 선택된 단원들에 대해 수능/내신 고난도(킬러) 수준의 **종합 평가 문제 총 10문제**를 출제해 주세요.\n"
-            f"[선택된 단원 목록]\n" + "\n".join([f"- {u}" for u in selected_units_for_exam]) + "\n\n"
-            "[출제 조건]\n"
-            "1. 문제는 정확히 10문제를 출제하세요.\n"
-            "2. 난이도는 매우 어렵게(고난도 심화/킬러 문항 수준) 출제하되, 수험생들이 복잡한 소수점 계산 대신 핵심 개념과 직관적 논리로 깔끔하게 떨어지도록 숫자를 예쁘게 설계하세요.\n"
-            "3. 각 문제 아래에는 정답과 함께 [4단계 격파 스텝]에 준하는 상세 해설을 포함해 주세요."
-        )
-        st.session_state.messages.append({"role": "user", "content": exam_prompt})
-        st.rerun()
+# 🌟 [LMS 핵심 기능] 선택한 단원의 10문제 시험지 발행 버튼
+if st.sidebar.button("📄 선택 단원 고난도 시험지(10문항) 발급"):
+    st.session_state.current_exam_unit = selected_unit_to_test
+    
+    # AI에게 고난도 10문제 출제 요청 프롬프트 생성
+    exam_gen_prompt = (
+        f"대학 전공/수능 킬러 수준의 **'{selected_unit_to_test}'** 단원 종합 평가 문제 총 10문제를 출제해 주세요.\n"
+        "[출제 조건]\n"
+        "1. 정확히 10문제를 출제하세요.\n"
+        "2. 난이도는 매우 어렵게 하되, 복잡한 지저분한 계산 대신 핵심 개념과 직관적 논리로 깔끔하게 풀리도록 숫자를 예쁘게 설계하세요.\n"
+        "3. 각 문제는 [문제 1]부터 [문제 10]까지 명확히 구분해 주시고, 정답 및 해설은 이 출제 내용에 포함하지 마세요(학생이 제출 후 채점받을 때 제공됨)."
+    )
+    
+    with st.spinner(f"⚡ '{selected_unit_to_test}' 시험지를 출제하는 중입니다..."):
+        try:
+            client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+            response = client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[
+                    {"role": "system", "content": "당신은 명쾌한 출제 위원 AI입니다. 수식은 LaTeX를 사용하세요."},
+                    {"role": "user", "content": exam_gen_prompt}
+                ],
+                temperature=0.4,
+                max_completion_tokens=4096,
+            )
+            st.session_state.exam_questions = response.choices[0].message.content
+        except Exception as e:
+            st.error(f"시험지 발급 중 오류 발생: {e}")
 
 st.sidebar.markdown("---")
-
-# 4. 사이드바: 교과서·참고서 텍스트 파일 패치
-st.sidebar.header("📚 교과서·참고서 패치")
-uploaded_file = st.sidebar.file_uploader("참고할 텍스트 파일(.txt) 업로드", type=["txt", "TXT"])
-
+st.sidebar.header("📚 강의 자료실 (교과서 패치)")
+uploaded_file = st.sidebar.file_uploader("참고 텍스트 파일(.txt) 업로드", type=["txt", "TXT"])
 textbook_context = ""
 if uploaded_file is not None:
     textbook_context = uploaded_file.read().decode("utf-8")
-    st.sidebar.success("✅ 교과서 내용이 장착되었습니다!")
+    st.sidebar.success("✅ 교재 연동 완료!")
 
-# 5. Secrets에서 API 키 검증
+# 5. API 키 검증 및 클라이언트 설정
 api_key = st.secrets.get("GROQ_API_KEY")
-
 if not api_key:
-    st.error("⚠️ GROQ_API_KEY가 등록되지 않았습니다. Streamlit Cloud의 Secrets 설정을 확인해 주세요.")
+    st.error("⚠️ GROQ_API_KEY가 등록되지 않았습니다. Streamlit Secrets를 확인해 주세요.")
     st.stop()
 
-# 6. Groq 클라이언트 및 모델 설정
 client = Groq(api_key=api_key)
 MODEL_NAME = "openai/gpt-oss-120b"
 
-# 7. 세션 상태 및 페르소나/시스템 프롬프트 초기화
+# 6. 세션 대화 히스토리 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "system",
             "content": (
-                "당신은 대한민국 고등학교 수학 및 물리 문제를 시원하게 해결하고 고난도 평가 문제를 출제해주는 열정적이고 명쾌한 AI 튜터 '물리친다'입니다. "
-                "사용자의 질문에 대해 일반 풀이 답변을 할 때는 반드시 [4단계 격파 스텝] 구조를 엄격히 지켜서 작성해 주세요.\n\n"
-                "[4단계 격파 스텝]\n"
-                "### 🥊 1단계: 문제 분석 및 핵심 조건\n"
-                "- 주어진 조건과 구하고자 하는 목표를 명확하게 정돈합니다.\n\n"
-                "### 💡 2단계: 필수 공식 및 개념 파악\n"
-                "- 이 문제를 공략하기 위해 꼭 필요한 고등학교 수학/물리 개념과 공식을 제시합니다.\n\n"
-                "### 🔍 3단계: 단계별 상세 계산 및 정복 과정\n"
-                "- 공식을 대입하여 한 단계씩 명확하고 쉽게 풀이 과정을 보여줍니다.\n\n"
-                "### 🎯 4단계: 최종 정답 및 3줄 요약\n"
-                "- 최종 결과와 가장 핵심이 되는 포인트 3가지를 깔끔하게 요약합니다.\n\n"
-                "[수식 작성 필수 규칙]\n"
-                "1. 모든 수학 및 물리 수식은 표준 LaTeX 문법을 사용하세요.\n"
-                "2. 문장 중간에 들어가는 짧은 수식은 반드시 인라인 형태인 $수식$ (예: $f(x)=0$)으로만 쓰세요. 문장 중간에 블록 형태인 $$를 쓰지 마세요.\n"
-                "3. 수식이 독립된 한 줄을 차지해야 할 때만 블록 형태인 $$수식$$을 사용하세요.\n"
-                "4. 수식 내부나 \\sqrt, \\frac 문법 안에 불필요한 쉼표(,)나 대괄호 기호를 넣지 마세요."
+                "당신은 대학 LMS 및 AI 튜터 '물리친다'입니다. "
+                "학생의 답안을 채점할 때 각 문제별 O/X를 판정하고, 전체 평균 점수(10문제 중 맞은 개수 기반)를 산출해 주세요. "
+                "만약 7문제 이상 맞추거나 완벽히 이해했다면 '🎉 [합격/클리어] 이 단원을 정복했습니다!' 메시지를 포함해 주세요."
             )
         }
     ]
 
-# 8. 수식 LaTeX 렌더링 정형화 헬퍼 함수
+# 7. 수식 정형화 헬퍼 함수
 def format_math_response(text: str) -> str:
     text = re.sub(r'([^\s])\$\$', r'\1 $$', text)
     text = re.sub(r'\$\$([^\s])', r'$$ \1', text)
-    
     def clean_inline_math(match):
         inner = match.group(1)
         if '\n' not in inner and len(inner) < 60:
             return f"${inner}$"
         return f"$$\n{inner}\n$$"
-    
     text = re.sub(r'\$\$(.*?)\$\$', clean_inline_math, text, flags=re.DOTALL)
-    text = re.sub(r'\\\[\s*(.*?)\s*\\\]', r'$$\1$$', text, flags=re.DOTALL)
-    text = re.sub(r'\\\(\s*(.*?)\s*\\\)', r'$\1$', text, flags=re.DOTALL)
-    text = re.sub(r'(\\sqrt|\\frac)\s*,\s*', r'\1 ', text)
     return text
 
-# 9. 기존 대화 출력
+# 8. 메인 화면: 발급된 시험지 표시 및 답안 제출 시스템
+if st.session_state.current_exam_unit:
+    st.markdown(f"### 📋 현재 응시 중인 시험: `{st.session_state.current_exam_unit}`")
+    with st.container():
+        st.markdown(format_math_response(st.session_state.exam_questions))
+    
+    st.markdown("---")
+    st.subheader("✍️ 답안 제출 및 AI 자동 채점")
+    with st.form("exam_submit_form"):
+        student_answers = st.text_area("1번부터 10번까지의 정답 및 풀이를 작성해 주세요 (예: 1번: 3, 2번: 15 ...)", height=150)
+        submit_button = st.form_submit_button("🚀 답안 제출 및 채점 요청")
+        
+        if submit_button:
+            if not student_answers.strip():
+                st.warning("⚠️ 답안을 입력해 주세요!")
+            else:
+                grading_query = (
+                    f"학생이 [{st.session_state.current_exam_unit}] 시험에 대한 다음 답안을 제출했습니다.\n"
+                    f"출제된 문제와 학생 답안을 비교하여 각 문항별 채점(O/X)과 상세 해설을 제공하고, 합격 여부(7문제 이상 정답 시 클리어)를 판정해 주세요.\n\n"
+                    f"[학생 제출 답안]\n{student_answers}"
+                )
+                st.session_state.messages.append({"role": "user", "content": grading_query})
+                
+                with st.spinner("🔍 AI 교수자가 답안을 정밀 채점하는 중입니다..."):
+                    try:
+                        payload = [{"role": "system", "content": st.session_state.messages[0]["content"]}]
+                        payload.extend(st.session_state.messages[1:])
+                        response = client.chat.completions.create(
+                            model=MODEL_NAME,
+                            messages=payload,
+                            temperature=0.3,
+                            max_completion_tokens=4096,
+                        )
+                        result_text = format_math_response(response.choices[0].message.content)
+                        st.session_state.messages.append({"role": "assistant", "content": result_text})
+                        
+                        # 채점 결과에 합격/클리어 키워드가 포함되면 자동으로 해당 단원 ⭕로 변경!
+                        if "클리어" in result_text or "합격" in result_text:
+                            st.session_state.cleared_units[st.session_state.current_exam_unit] = True
+                            st.success(f"🎉 축하합니다! [{st.session_state.current_exam_unit}] 단원이 공식 클리어(⭕)되었습니다!")
+                        
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"채점 중 오류 발생: {e}")
+
+# 9. 대화 기록 출력 (일반 질문 및 채점 결과 히스토리)
+st.markdown("---")
+st.subheader("💬 AI 튜터 Q&A 및 피드백 로그")
 for msg in st.session_state.messages:
     if msg["role"] != "system":
         with st.chat_message(msg["role"]):
             st.markdown(format_math_response(msg["content"]))
 
-# 10. 사용자 입력 처리 및 API 호출
-if user_input := st.chat_input("물리치고 싶은 문제나 개념을 입력하세요! (예: 미적분1 함수의 극한 문제 풀어줘)"):
+# 10. 일반 채팅 입력
+if user_input := st.chat_input("추가로 궁금한 개념이나 질문을 입력하세요!"):
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
-
-# 시스템 프롬프트에 업로드된 교과서 컨텍스트 동적 추가
-system_content = st.session_state.messages[0]["content"]
-if textbook_context:
-    system_content += f"\n\n[참고 교과서 내용]\n{textbook_context}"
-
-payload_messages = [{"role": "system", "content": system_content}]
-recent_msgs = [m for m in st.session_state.messages[1:] if m["role"] != "system"][-6:]
-payload_messages.extend(recent_msgs)
-
-# 마지막 메시지가 사용자의 입력이므로 이에 대한 AI 응답 생성
-if len(st.session_state.messages) > 1 and st.session_state.messages[-1]["role"] == "user":
+    
+    system_content = st.session_state.messages[0]["content"]
+    if textbook_context:
+        system_content += f"\n\n[참고 교과서 내용]\n{textbook_context}"
+        
+    payload = [{"role": "system", "content": system_content}]
+    payload.extend([m for m in st.session_state.messages[1:] if m["role"] != "system"][-6:])
+    
     with st.chat_message("assistant"):
-        with st.spinner("⚡ '물리친다' 튜터가 고난도 10문제 시험지를 출제하는 중..."):
+        with st.spinner("⚡ 튜터가 답변을 작성 중입니다..."):
             try:
                 response = client.chat.completions.create(
                     model=MODEL_NAME,
-                    messages=payload_messages,
-                    temperature=0.4,
+                    messages=payload,
+                    temperature=0.3,
                     max_completion_tokens=4096,
                 )
-                ai_answer = response.choices[0].message.content
-                
-                formatted_answer = format_math_response(ai_answer)
-                st.markdown(formatted_answer)
-                
-                st.session_state.messages.append({"role": "assistant", "content": formatted_answer})
+                ai_answer = format_math_response(response.choices[0].message.content)
+                st.markdown(ai_answer)
+                st.session_state.messages.append({"role": "assistant", "content": ai_answer})
             except Exception as e:
-                st.error(f"API 호출 중 오류가 발생했습니다: {e}")
+                st.error(f"오류 발생: {e}")
