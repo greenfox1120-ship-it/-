@@ -12,14 +12,14 @@ st.set_page_config(
 
 # 2. 메인 타이틀 & UI 헤더
 st.title("⚡ 물리친다 (Pul-i-chin-da) - LMS 포털")
-st.caption("수능·모의고사 킬러문항 정복 및 AI 자동 채점 시스템 (30분 제한 시간 포함)")
+st.caption("수능·모의고사 스타일 고난도 단원 마무리 및 AI 자동 채점 시스템 (30분 제한 시간 포함)")
 st.markdown("---")
 
 # 3. 세션 상태 초기화 (단원별 클리어 여부 및 시험 문제 상태 관리)
 if "cleared_units" not in st.session_state:
     st.session_state.cleared_units = {
         "📐 [수학 1단계] 공통수학 1, 2": False,
-        "📐 [수학 2단계] 대수 및 기학": False,
+        "📐 [수학 2단계] 대수 및 기하": False,
         "📐 [수학 3단계] 미적분 I": False,
         "📐 [수학 4단계] 미적분 II": False,
         "⚛️ [물리 1단계] 힘과 운동": False,
@@ -39,10 +39,10 @@ if "exam_start_time" not in st.session_state:
 
 # 4. 사이드바 UI: 대학 LMS 스타일 단원 퀘스트 맵
 st.sidebar.header("🎓 수강 과목 및 단원 퀘스트")
-st.sidebar.write("단원을 클릭하여 수능 기출 기반 종합 평가에 응시하세요!")
+st.sidebar.write("단원을 클릭하여 고난도 단원 마무리 문제에 응시하세요!")
 
 selected_unit_to_test = st.sidebar.selectbox(
-    "시험 응시할 단원 선택",
+    "응시할 단원 선택",
     options=list(st.session_state.cleared_units.keys())
 )
 
@@ -61,17 +61,17 @@ st.sidebar.write(f"🏆 이수율: {int(progress * 100)}% ({cleared_count}/{tota
 
 st.sidebar.markdown("---")
 
-# 🌟 [LMS 핵심 기능] 선택한 단원의 10문제 수능 출처형 시험지 발행 버튼 (30분 타이머 시작 포함)
-if st.sidebar.button("📄 선택 단원 수능/기출 10문항 시험지 발급"):
+# 🌟 [LMS 핵심 기능] 선택한 단원의 고난도 단원 마무리 문제 발행 버튼
+if st.sidebar.button("📄 고난도 단원 마무리 문제(10문항) 발급"):
     st.session_state.current_exam_unit = selected_unit_to_test
     st.session_state.exam_start_time = time.time()  # 30분 타이머 시작 시간 기록
     
     exam_gen_prompt = (
-        f"대학 전공/수능 킬러 수준의 **'{selected_unit_to_test}'** 단원 종합 평가 문제 총 10문제를 출제해 주세요.\n\n"
+        f"**'{selected_unit_to_test}'** 단원의 **고난도 단원 마무리 문제** 총 10문제를 출제해 주세요.\n\n"
         "[🚨 절대 준수 사항 및 출제 규칙]\n"
         "1. 인사말, 서두, 안내 문구 등 어떠한 부가 설명도 절대 작성하지 마세요. 오직 [문제 1]부터 [문제 10]까지의 본문만 출력하세요.\n"
-        "2. 각 문제는 실제 대한민국 수능 또는 교육청 평가원 모의고사 기출 문항 또는 그와 완벽히 동일한 유형의 고난도 변형 문항으로 구성하세요.\n"
-        "3. 문제 하단에 반드시 **[출처: 연도 교육청/평가원/수능 OO번 유형]** 형태를 명시해 주세요.\n"
+        "2. 각 문제는 실제 수능 및 평가원 모의고사 킬러/준킬러 문항과 완벽히 동일한 스타일과 난이도로 구성하세요.\n"
+        "3. **문제 하단에 출처를 절대로 표기하지 마세요.** (출처 관련 문구 일체 작성 금지)\n"
         "4. 만약 선택된 단원이 **'공통수학 1, 2'**라면, **절대 미분, 적분, 함수의 극한 등 고2~고3 미적분 개념을 포함하지 마세요.** 오직 다항식, 방정식/부등식, 경우의 수, 집합과 명제, 함수, 도형의 방정식 범위 내에서만 출제하세요.\n"
         "5. **'대수 및 기하'**는 지수·로그, 삼각함수, 수열, 벡터, 이차곡선으로 한정합니다.\n"
         "6. **'미적분 I'**은 함수의 극한/연속과 다항함수의 미분/적분으로 한정합니다.\n"
@@ -80,16 +80,16 @@ if st.sidebar.button("📄 선택 단원 수능/기출 10문항 시험지 발급
         "- 정확히 10문제를 출제하세요.\n"
         "- 난이도는 매우 어렵게 하되, 복잡한 계산 대신 핵심 개념과 논리로 깔끔하게 풀리도록 숫자를 설계하세요.\n"
         "- **절대 수식을 대괄호 `[...]`나 괄호 `(...)` 안에 넣지 마세요.** 모든 수식은 반드시 인라인 수식 `$수식$` 또는 블록 수식 `$$수식$$` 형태의 표준 LaTeX 문법만 사용하세요.\n"
-        "- 정답 및 해설은 이 출제 내용에 절대 포함하지 마세요."
+        "- 정답 및 해설은 이 출제 내용에 대 포함하지 마세요."
     )
     
-    with st.spinner(f"⚡ '{selected_unit_to_test}' 30분 제한 수능 기출 맞춤형 시험지를 출제하는 중입니다..."):
+    with st.spinner(f"⚡ '{selected_unit_to_test}' 고난도 단원 마무리 문제를 출제하는 중입니다..."):
         try:
             client = Groq(api_key=st.secrets["GROQ_API_KEY"])
             response = client.chat.completions.create(
                 model="openai/gpt-oss-120b",
                 messages=[
-                    {"role": "system", "content": "당신은 명쾌한 수능 출제 위원 AI입니다. 인사말 없이 순수 시험 문제만 출력하며, 수식은 반드시 LaTeX($ 또는 $$)를 사용하세요."},
+                    {"role": "system", "content": "당신은 명쾌한 수능 출제 위원 AI입니다. 인사말과 출처 없이 순수 시험 문제만 출력하며, 수식은 반드시 LaTeX($ 또는 $$)를 사용하세요."},
                     {"role": "user", "content": exam_gen_prompt}
                 ],
                 temperature=0.3,
@@ -150,7 +150,7 @@ def format_math_response(text: str) -> str:
 
 # 8. 메인 화면: 발급된 시험지 표시 및 30분 제한 타이머 / 답안 제출 시스템
 if st.session_state.current_exam_unit and st.session_state.exam_start_time:
-    st.markdown(f"### 📋 현재 응시 중인 시험: `{st.session_state.current_exam_unit}`")
+    st.markdown(f"### 📋 [고난도 단원 마무리 문제] `{st.session_state.current_exam_unit}`")
     
     # 30분 타이머 계산 (30분 = 1800초)
     elapsed_time = time.time() - st.session_state.exam_start_time
@@ -159,7 +159,7 @@ if st.session_state.current_exam_unit and st.session_state.exam_start_time:
     if remaining_time > 0:
         mins = int(remaining_time // 60)
         secs = int(remaining_time % 60)
-        st.info(f"⏱️ **남은 시험 시간: {mins}분 {secs}초** (제한시간 30분)")
+        st.info(f"⏱️ **남은 제한 시간: {mins}분 {secs}초** (제한시간 30분)")
     else:
         st.warning("⚠️ **시험 제한 시간(30분)이 초과되었습니다!** 빠르게 답안을 제출해 주세요.")
     
@@ -177,7 +177,7 @@ if st.session_state.current_exam_unit and st.session_state.exam_start_time:
                 st.warning("⚠️ 답안을 입력해 주세요!")
             else:
                 grading_query = (
-                    f"학생이 [{st.session_state.current_exam_unit}] 시험에 대한 다음 답안을 제출했습니다.\n"
+                    f"학생이 [{st.session_state.current_exam_unit}] 고난도 단원 마무리 문제에 대한 다음 답안을 제출했습니다.\n"
                     f"출제된 문제와 학생 답안을 비교하여 각 문항별 채점(O/X)과 상세 해설을 제공하고, 합격 여부(7문제 이상 정답 시 클리어)를 판정해 주세요.\n\n"
                     f"[학생 제출 답안]\n{student_answers}"
                 )
